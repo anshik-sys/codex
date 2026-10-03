@@ -166,15 +166,14 @@ pub(super) async fn run_main_inner(
                 approval_policy,
                 sandbox_mode,
                 cwd: validation_cwd.map(AbsolutePathBuf::into_path_buf),
-                model_provider: cli
-                    .oss
-                    .then(|| {
-                        resolve_oss_provider(
-                            cli.oss_provider.as_deref(),
-                            &validation_bootstrap.config_toml,
-                        )
-                    })
-                    .flatten(),
+                model_provider: if cli.oss {
+                    resolve_oss_provider(
+                        cli.oss_provider.as_deref(),
+                        &validation_bootstrap.config_toml,
+                    )
+                } else {
+                    cli.model_provider.clone()
+                },
                 bypass_hook_trust: cli.bypass_hook_trust.then_some(true),
                 additional_writable_roots: cli.add_dir.clone(),
                 ..Default::default()
@@ -359,6 +358,11 @@ pub(super) async fn run_main_inner(
     };
 
     let mut manually_selected_oss_provider = None;
+    if cli.oss && cli.model_provider.is_some() {
+        return Err(std::io::Error::other(
+            "--provider cannot be combined with --oss",
+        ));
+    }
     let model_provider_override = if cli.oss {
         let bootstrap_config_with_cloud_config;
         let config_toml_for_oss = if cli.oss_provider.is_none() {
@@ -415,7 +419,7 @@ pub(super) async fn run_main_inner(
             Some(provider)
         }
     } else {
-        None
+        cli.model_provider.clone()
     };
 
     // When using `--oss`, let the bootstrapper pick the model based on selected provider

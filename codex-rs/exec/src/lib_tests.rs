@@ -897,3 +897,21 @@ fn sample_thread_start_response() -> ThreadStartResponse {
         multi_agent_mode: Default::default(),
     }
 }
+
+#[test]
+fn provider_override_requires_a_compatible_model() {
+    let openrouter = Some("openrouter");
+    assert!(require_model_for_provider(None, None, None, None).is_ok());
+    assert!(require_model_for_provider(openrouter, Some("openai/gpt-4o-mini"), None, None).is_ok());
+    assert!(require_model_for_provider(openrouter, None, openrouter, Some("x/y")).is_ok());
+
+    // An OpenAI default model must not carry over to another provider.
+    let error = require_model_for_provider(openrouter, None, Some("openai"), Some("gpt-5"))
+        .expect_err("model paired with another provider");
+    assert_eq!(
+        error.to_string(),
+        "--provider openrouter requires --model unless config sets model_provider = \"openrouter\" with a model"
+    );
+    assert!(require_model_for_provider(openrouter, None, openrouter, None).is_err());
+    assert!(require_model_for_provider(openrouter, None, None, None).is_err());
+}

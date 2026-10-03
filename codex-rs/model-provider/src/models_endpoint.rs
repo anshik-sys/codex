@@ -31,9 +31,12 @@ use codex_models_manager::manager::ModelsEndpointResponse;
 use codex_otel::TelemetryAuthMode;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CoreResult;
+use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelInfo;
 use codex_response_debug_context::extract_response_debug_context;
 use codex_response_debug_context::telemetry_transport_error_message;
 use http::HeaderMap;
+use serde::Deserialize;
 use tokio::time::timeout;
 
 use crate::auth::ResolvedProviderAuth;
@@ -160,25 +163,34 @@ impl OpenAiModelsEndpoint {
                 .model_catalog_url
                 .as_ref()
                 .map(|_| MAX_MODEL_CATALOG_BYTES);
-            client
-                .list_models(request_url, HeaderMap::new(), response_body_limit_bytes)
-                .await
-                .map_err(|mut error| {
-                    if self.provider_info.model_catalog_url.is_some()
-                        && let codex_api::ApiError::Transport(TransportError::Http {
-                            url,
-                            headers,
-                            body,
-                            ..
-                        }) = &mut error
-                    {
-                        // Provider diagnostics may echo URL credentials or other secrets.
-                        *url = None;
-                        *headers = None;
-                        *body = None;
-                    }
-                    map_api_error(error)
-                })
+            let result = if self.provider_info.is_openrouter() {
+                client
+                    .list_models_raw(request_url, HeaderMap::new(), response_body_limit_bytes)
+                    .await
+                    .and_then(|(body, etag)| {
+                        decode_openrouter_models(&body).map(|models| (models, etag))
+                    })
+            } else {
+                client
+                    .list_models(request_url, HeaderMap::new(), response_body_limit_bytes)
+                    .await
+            };
+            result.map_err(|mut error| {
+                if self.provider_info.model_catalog_url.is_some()
+                    && let codex_api::ApiError::Transport(TransportError::Http {
+                        url,
+                        headers,
+                        body,
+                        ..
+                    }) = &mut error
+                {
+                    // Provider diagnostics may echo URL credentials or other secrets.
+                    *url = None;
+                    *headers = None;
+                    *body = None;
+                }
+                map_api_error(error)
+            })
         })
         .await
         .map_err(|_| CodexErr::RequestTimeout)??;
@@ -207,6 +219,95 @@ impl OpenAiModelsEndpoint {
             .is_some_and(|auth_manager| auth_manager.codex_api_key_env_enabled());
         collect_auth_env_telemetry(&self.provider_info, codex_api_key_env_enabled)
     }
+}
+
+#[derive(Deserialize)]
+struct OpenRouterModelsResponse {
+    data: Vec<OpenRouterModel>,
+}
+
+#[derive(Deserialize)]
+struct OpenRouterModel {
+    id: String,
+    name: String,
+    description: Option<String>,
+    context_length: Option<i64>,
+    #[serde(default)]
+    supported_parameters: Vec<String>,
+    architecture: OpenRouterArchitecture,
+}
+
+#[derive(Deserialize)]
+struct OpenRouterArchitecture {
+    #[serde(default)]
+    input_modalities: Vec<String>,
+    #[serde(default)]
+    output_modalities: Vec<String>,
+}
+
+fn decode_openrouter_models(body: &[u8]) -> Result<Vec<ModelInfo>, codex_api::ApiError> {
+    let response: OpenRouterModelsResponse = serde_json::from_slice(body).map_err(|error| {
+        codex_api::ApiError::Stream(format!(
+            "failed to decode OpenRouter models response: {:?} at line {} column {} (body: {} bytes)",
+            error.classify(),
+            error.line(),
+            error.column(),
+            body.len()
+        ))
+    })?;
+    let mut models = response
+        .data
+        .into_iter()
+        .filter(|model| {
+            !model.id.trim().is_empty()
+                && model
+                    .architecture
+                    .input_modalities
+                    .iter()
+                    .any(|modality| modality == "text")
+                && model
+                    .architecture
+                    .output_modalities
+                    .iter()
+                    .any(|modality| modality == "text")
+                && model
+                    .supported_parameters
+                    .iter()
+                    .any(|parameter| matches!(parameter.as_str(), "tools" | "tool_choice"))
+        })
+        .map(|model| {
+            let mut info = codex_models_manager::model_info::model_info_from_slug(&model.id);
+            info.display_name = model.name;
+            info.description = model.description;
+            info.context_window = model.context_length;
+            info.max_context_window = model.context_length;
+            info.input_modalities = model
+                .architecture
+                .input_modalities
+                .iter()
+                .filter_map(|modality| match modality.as_str() {
+                    "text" => Some(InputModality::Text),
+                    "image" => Some(InputModality::Image),
+                    "audio" => Some(InputModality::Audio),
+                    _ => None,
+                })
+                .collect();
+            info.visibility = codex_protocol::openai_models::ModelVisibility::List;
+            info.used_fallback_model_metadata = false;
+            info.supports_search_tool = false;
+            info.supports_experimental_context = false;
+            info.use_responses_lite = false;
+            info
+        })
+        .collect::<Vec<_>>();
+    models.sort_by(|a, b| a.slug.cmp(&b.slug));
+    models.dedup_by(|a, b| a.slug == b.slug);
+    models.sort_by(|a, b| {
+        a.display_name
+            .cmp(&b.display_name)
+            .then(a.slug.cmp(&b.slug))
+    });
+    Ok(models)
 }
 
 impl ModelsEndpointClient for OpenAiModelsEndpoint {
@@ -972,5 +1073,56 @@ mod tests {
         assert!(!error.to_string().contains("catalog-secret"));
         assert!(!format!("{error:?}").contains("catalog-secret"));
         assert_eq!(destination.received_requests().await.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn openrouter_catalog_keeps_only_agent_capable_models() {
+        let body = br#"{"data": [
+            {"id": "b/agent", "name": "Agent", "description": "d", "context_length": 128000,
+             "supported_parameters": ["tools"],
+             "architecture": {"input_modalities": ["text", "image", "file"], "output_modalities": ["text"]}},
+            {"id": "b/agent", "name": "Agent", "context_length": 128000,
+             "supported_parameters": ["tools"],
+             "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]}},
+            {"id": "a/no-tools", "name": "No tools",
+             "supported_parameters": ["temperature"],
+             "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]}},
+            {"id": "c/image-out", "name": "Image out",
+             "supported_parameters": ["tool_choice"],
+             "architecture": {"input_modalities": ["text"], "output_modalities": ["image"]}},
+            {"id": " ", "name": "Empty",
+             "supported_parameters": ["tools"],
+             "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]}}
+        ]}"#;
+
+        let models = decode_openrouter_models(body).expect("catalog should decode");
+
+        assert_eq!(
+            models
+                .iter()
+                .map(|model| model.slug.as_str())
+                .collect::<Vec<_>>(),
+            vec!["b/agent"]
+        );
+        let model = &models[0];
+        assert_eq!(model.display_name, "Agent");
+        assert_eq!(model.context_window, Some(128_000));
+        assert_eq!(model.max_context_window, Some(128_000));
+        assert_eq!(
+            model.input_modalities,
+            vec![InputModality::Text, InputModality::Image]
+        );
+        assert_eq!(model.visibility, ModelVisibility::List);
+        assert!(!model.used_fallback_model_metadata);
+    }
+
+    #[test]
+    fn openrouter_catalog_errors_without_echoing_body() {
+        let error = decode_openrouter_models(br#"{"data": "sk-or-secret"}"#)
+            .expect_err("malformed catalog should fail");
+
+        let message = error.to_string();
+        assert!(message.contains("OpenRouter models response"), "{message}");
+        assert!(!message.contains("sk-or-secret"), "{message}");
     }
 }

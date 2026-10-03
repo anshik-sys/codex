@@ -22,6 +22,10 @@ pub struct SharedCliOptions {
     #[arg(long, short = 'm')]
     pub model: Option<String>,
 
+    /// Model provider the agent should use.
+    #[arg(long = "provider", value_name = "ID")]
+    pub model_provider: Option<String>,
+
     /// Use open-source provider.
     #[arg(long = "oss", default_value_t = false)]
     pub oss: bool,
@@ -99,6 +103,7 @@ impl SharedCliOptions {
         let Self {
             images,
             model,
+            model_provider,
             oss,
             oss_provider,
             config_profile_v2,
@@ -113,6 +118,7 @@ impl SharedCliOptions {
         let Self {
             images: root_images,
             model: root_model,
+            model_provider: root_model_provider,
             oss: root_oss,
             oss_provider: root_oss_provider,
             config_profile_v2: root_config_profile_v2,
@@ -127,6 +133,9 @@ impl SharedCliOptions {
 
         if model.is_none() {
             model.clone_from(root_model);
+        }
+        if model_provider.is_none() {
+            model_provider.clone_from(root_model_provider);
         }
         if *root_oss {
             *oss = true;
@@ -169,6 +178,7 @@ impl SharedCliOptions {
         let Self {
             images,
             model,
+            model_provider,
             oss,
             oss_provider,
             config_profile_v2,
@@ -183,6 +193,9 @@ impl SharedCliOptions {
 
         if let Some(model) = model {
             self.model = Some(model);
+        }
+        if let Some(model_provider) = model_provider {
+            self.model_provider = Some(model_provider);
         }
         if oss {
             self.oss = true;

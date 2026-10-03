@@ -305,6 +305,7 @@ mod copy_picker;
 mod hook_lifecycle;
 mod hooks;
 mod interaction;
+mod provider_picker;
 pub(crate) use interaction::KeyEventAction;
 mod skills;
 mod slash_dispatch;

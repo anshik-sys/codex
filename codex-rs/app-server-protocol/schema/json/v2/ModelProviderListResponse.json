@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ModelProvider": {
+      "properties": {
+        "credentialEnvVar": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "credentialReady": {
+          "type": "boolean"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isDefault": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "credentialReady",
+        "displayName",
+        "id",
+        "isDefault"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/definitions/ModelProvider"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "ModelProviderListResponse",
+  "type": "object"
+}

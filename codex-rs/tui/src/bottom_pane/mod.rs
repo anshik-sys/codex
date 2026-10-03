@@ -624,6 +624,10 @@ impl BottomPane {
         self.request_redraw();
     }
 
+    pub fn set_provider_command_enabled(&mut self, enabled: bool) {
+        self.composer.set_provider_command_enabled(enabled);
+    }
+
     pub fn set_goal_command_enabled(&mut self, enabled: bool) {
         self.composer.set_goal_command_enabled(enabled);
         self.request_redraw();

@@ -4,6 +4,10 @@
 
 export type ModelListParams = {
 /**
+ * Provider whose compatible models should be returned. Omission uses the active provider.
+ */
+modelProvider?: string | null,
+/**
  * Opaque pagination cursor returned by a previous call.
  */
 cursor?: string | null,

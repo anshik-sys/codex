@@ -2803,6 +2803,24 @@ class ModelListParams(BaseModel):
         int | None,
         Field(description="Optional page size; defaults to a reasonable server-side value.", ge=0),
     ] = None
+    model_provider: Annotated[
+        str | None,
+        Field(
+            alias="modelProvider",
+            description="Provider whose compatible models should be returned. Omission uses the active provider.",
+        ),
+    ] = None
+
+
+class ModelProvider(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    credential_env_var: Annotated[str | None, Field(alias="credentialEnvVar")] = None
+    credential_ready: Annotated[bool, Field(alias="credentialReady")]
+    display_name: Annotated[str, Field(alias="displayName")]
+    id: str
+    is_default: Annotated[bool, Field(alias="isDefault")]
 
 
 class ModelProviderCapabilitiesReadParams(BaseModel):
@@ -2818,6 +2836,20 @@ class ModelProviderCapabilitiesReadResponse(BaseModel):
     )
     image_generation: Annotated[bool, Field(alias="imageGeneration")]
     web_search: Annotated[bool, Field(alias="webSearch")]
+
+
+class ModelProviderListParams(BaseModel):
+    pass
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+
+
+class ModelProviderListResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    data: list[ModelProvider]
 
 
 class ModelRerouteReason(RootModel[Literal["highRiskCyberActivity"]]):
@@ -7406,6 +7438,15 @@ class ModelListRequest(BaseModel):
     id: RequestId
     method: Annotated[Literal["model/list"], Field(title="Model/listRequestMethod")]
     params: ModelListParams
+
+
+class ModelProviderListRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[Literal["modelProvider/list"], Field(title="ModelProvider/listRequestMethod")]
+    params: ModelProviderListParams
 
 
 class AccountGatewayOAuthReadRequest(BaseModel):
@@ -12659,6 +12700,7 @@ class ClientRequest(
         | TurnInterruptRequest
         | ReviewStartRequest
         | ModelListRequest
+        | ModelProviderListRequest
         | AccountGatewayOAuthReadRequest
         | AccountGatewayOAuthLoginRequest
         | AccountGatewayOAuthCancelRequest
@@ -12770,6 +12812,7 @@ class ClientRequest(
         | TurnInterruptRequest
         | ReviewStartRequest
         | ModelListRequest
+        | ModelProviderListRequest
         | AccountGatewayOAuthReadRequest
         | AccountGatewayOAuthLoginRequest
         | AccountGatewayOAuthCancelRequest

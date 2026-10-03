@@ -297,6 +297,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
     let SharedCliOptions {
         images,
         model: model_cli_arg,
+        model_provider: model_provider_cli_arg,
         oss,
         oss_provider,
         config_profile_v2,
@@ -538,6 +539,9 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
     let run_loader_overrides = loader_overrides.clone();
     let run_cloud_config_bundle = cloud_config_bundle.clone();
 
+    if oss && model_provider_cli_arg.is_some() {
+        anyhow::bail!("--provider cannot be combined with --oss");
+    }
     let model_provider = if oss {
         let bootstrap_config_with_cloud_config;
         let config_toml_for_oss = if oss_provider.is_none() {
@@ -568,7 +572,13 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
             ));
         }
     } else {
-        None // No OSS mode enabled
+        require_model_for_provider(
+            model_provider_cli_arg.as_deref(),
+            model_cli_arg.as_deref(),
+            bootstrap_config_toml.model_provider.as_deref(),
+            bootstrap_config_toml.model.as_deref(),
+        )?;
+        model_provider_cli_arg
     };
 
     // When using `--oss`, let the bootstrapper pick the model based on selected provider
@@ -2415,6 +2425,25 @@ fn build_review_request(args: &ReviewArgs) -> anyhow::Result<ReviewRequest> {
         target,
         user_facing_hint: None,
     })
+}
+
+/// Rejects `--provider` without `--model` unless config already pairs that provider with a model,
+/// so the default OpenAI model is never sent to another provider.
+fn require_model_for_provider(
+    provider: Option<&str>,
+    model: Option<&str>,
+    configured_provider: Option<&str>,
+    configured_model: Option<&str>,
+) -> anyhow::Result<()> {
+    let Some(provider) = provider else {
+        return Ok(());
+    };
+    if model.is_some() || (configured_provider == Some(provider) && configured_model.is_some()) {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "--provider {provider} requires --model unless config sets model_provider = \"{provider}\" with a model"
+    )
 }
 
 #[cfg(test)]

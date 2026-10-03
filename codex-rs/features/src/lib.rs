@@ -96,6 +96,8 @@ pub enum Feature {
     AnalyticsPlanHistory,
     /// Discover model catalogs for OpenAI API-key authentication.
     ApiKeyModelDiscovery,
+    /// Allow selecting built-in and configured model providers at runtime.
+    MultiProviderSelection,
     /// Forward explicit programs with builtin OpenAI API keys.
     ApiKeyCyberAccessPrograms,
     /// Deprecated no-op; use `tui.fullscreen_transcript` instead.
@@ -1319,6 +1321,16 @@ pub const FEATURES: &[FeatureSpec] = &[
         key: "api_key_model_discovery",
         stage: Stage::Stable,
         default_enabled: true,
+    },
+    FeatureSpec {
+        id: Feature::MultiProviderSelection,
+        key: "multi_provider_selection",
+        stage: Stage::Experimental {
+            name: "Multi-provider selection",
+            menu_description: "Select OpenRouter or another configured model provider.",
+            announcement: "",
+        },
+        default_enabled: false,
     },
     FeatureSpec {
         id: Feature::ApiKeyCyberAccessPrograms,

@@ -932,6 +932,38 @@ pub(crate) enum AppEvent {
         section_errors: Vec<PluginRemoteSectionError>,
     },
 
+    /// Fetch selectable model providers for `/provider`.
+    FetchModelProviders,
+
+    /// Result of fetching selectable model providers.
+    ModelProvidersLoaded {
+        result: Result<codex_app_server_protocol::ModelProviderListResponse, String>,
+    },
+
+    /// Fetch the models one provider offers, before switching to it.
+    FetchProviderModels {
+        provider: String,
+    },
+
+    /// Result of fetching one provider's models.
+    ProviderModelsLoaded {
+        provider: String,
+        result: Result<codex_app_server_protocol::ModelListResponse, String>,
+    },
+
+    /// Ask whether a chosen provider/model pair applies once or becomes the default.
+    ProviderModelChosen {
+        provider: String,
+        model: String,
+    },
+
+    /// Start a fresh thread on the pair, persisting it first when `persist` is set.
+    ApplyProviderSelection {
+        provider: String,
+        model: String,
+        persist: bool,
+    },
+
     /// Result of fetching lifecycle hook inventory.
     HooksLoaded {
         cwd: PathBuf,

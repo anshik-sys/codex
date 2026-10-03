@@ -1010,6 +1010,9 @@
             "multi_agent_v2_dynamic_tools": {
               "type": "boolean"
             },
+            "multi_provider_selection": {
+              "type": "boolean"
+            },
             "network_proxy": {
               "$ref": "#/definitions/FeatureToml_for_NetworkProxyConfigToml"
             },
@@ -7163,6 +7166,9 @@
           "$ref": "#/definitions/FeatureToml_for_MultiAgentV2ConfigToml"
         },
         "multi_agent_v2_dynamic_tools": {
+          "type": "boolean"
+        },
+        "multi_provider_selection": {
           "type": "boolean"
         },
         "network_proxy": {

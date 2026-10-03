@@ -3,6 +3,7 @@ use crate::model_catalog::ModelCatalog;
 use codex_config::ConfigPathContext;
 use codex_core::config::permission_profile_catalog;
 use codex_hooks::HookListEntryHandler;
+use codex_protocol::openai_models::ModelPreset;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
 use codex_utils_path_uri::PathConvention;
 use codex_utils_path_uri::PathUri;
@@ -216,6 +217,91 @@ impl CatalogRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
+    pub(crate) async fn model_provider_list(
+        &self,
+        params: codex_app_server_protocol::ModelProviderListParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let codex_app_server_protocol::ModelProviderListParams {} = params;
+        self.require_multi_provider_selection()?;
+        let auth_manager = self.thread_manager.auth_manager();
+        let mut data = self
+            .config
+            .model_providers
+            .iter()
+            .map(|(id, info)| {
+                let credential_ready = if info.requires_openai_auth {
+                    auth_manager.auth_cached().is_some()
+                } else if info.env_key.is_some() {
+                    matches!(info.api_key(), Ok(Some(_)))
+                } else {
+                    // ponytail: local, Bedrock, and command-auth providers resolve credentials
+                    // lazily; probe them here if the picker ever shows false positives.
+                    true
+                };
+                codex_app_server_protocol::ModelProvider {
+                    id: id.clone(),
+                    display_name: info.name.clone(),
+                    is_default: *id == self.config.model_provider_id,
+                    credential_ready,
+                    credential_env_var: info.env_key.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+        data.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(Some(
+            codex_app_server_protocol::ModelProviderListResponse { data }.into(),
+        ))
+    }
+
+    fn require_multi_provider_selection(&self) -> Result<(), JSONRPCErrorError> {
+        if self
+            .config
+            .features
+            .enabled(Feature::MultiProviderSelection)
+        {
+            Ok(())
+        } else {
+            Err(invalid_request(
+                "multi_provider_selection feature is disabled",
+            ))
+        }
+    }
+
+    /// Lists a non-active provider's catalog without changing the retained startup route.
+    async fn list_provider_models(
+        &self,
+        provider_id: &str,
+    ) -> Result<Vec<ModelPreset>, JSONRPCErrorError> {
+        self.require_multi_provider_selection()?;
+        let provider = self
+            .config
+            .model_providers
+            .get(provider_id)
+            .cloned()
+            .ok_or_else(|| invalid_request(format!("unknown model provider: {provider_id}")))?;
+        // Fail with the provider's own instructions instead of an empty catalog.
+        provider
+            .api_key()
+            .map_err(|err| invalid_request(err.to_string()))?;
+        let mut config = (*self.config).clone();
+        config.model_provider_id = provider_id.to_string();
+        config.model_provider = provider;
+        // A configured catalog belongs to the active provider only.
+        config.model_catalog = None;
+        self.config_manager
+            .check_thread_model_provider(&config)
+            .await
+            .map_err(|err| config_load_error(&err))?;
+        Ok(
+            codex_core::build_models_manager(&config, self.thread_manager.auth_manager())
+                .list_models(
+                    codex_models_manager::manager::RefreshStrategy::OnlineIfUncached,
+                    config.http_client_factory(),
+                )
+                .await,
+        )
+    }
+
     pub(crate) async fn experimental_feature_list(
         &self,
         params: ExperimentalFeatureListParams,
@@ -282,15 +368,21 @@ impl CatalogRequestProcessor {
         params: ModelListParams,
     ) -> Result<ModelListResponse, JSONRPCErrorError> {
         let ModelListParams {
+            model_provider,
             limit,
             cursor,
             include_hidden,
         } = params;
-        let presets = self
-            .model_catalog
-            .list_models(codex_models_manager::manager::RefreshStrategy::OnlineIfUncached)
-            .await
-            .map_err(|err| config_load_error(&err))?;
+        let presets = match model_provider {
+            Some(provider_id) if provider_id != self.config.model_provider_id => {
+                self.list_provider_models(&provider_id).await?
+            }
+            _ => self
+                .model_catalog
+                .list_models(codex_models_manager::manager::RefreshStrategy::OnlineIfUncached)
+                .await
+                .map_err(|err| config_load_error(&err))?,
+        };
         let models = supported_models(presets, include_hidden.unwrap_or(false));
         let total = models.len();
 

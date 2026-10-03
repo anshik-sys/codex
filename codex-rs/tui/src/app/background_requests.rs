@@ -335,6 +335,49 @@ impl App {
         });
     }
 
+    pub(super) fn fetch_model_providers(&mut self, app_server: &AppServerSession) {
+        let request_handle = app_server.request_handle();
+        let app_event_tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let result = request_handle
+                .request_typed(ClientRequest::ModelProviderList {
+                    request_id: RequestId::String(format!(
+                        "model-provider-list-{}",
+                        uuid::Uuid::new_v4()
+                    )),
+                    params: codex_app_server_protocol::ModelProviderListParams {},
+                })
+                .await
+                .map_err(|err| err.to_string());
+            app_event_tx.send(AppEvent::ModelProvidersLoaded { result });
+        });
+    }
+
+    pub(super) fn fetch_provider_models(
+        &mut self,
+        app_server: &AppServerSession,
+        provider: String,
+    ) {
+        let request_handle = app_server.request_handle();
+        let app_event_tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let result = request_handle
+                .request_typed(ClientRequest::ModelList {
+                    request_id: RequestId::String(format!(
+                        "provider-model-list-{}",
+                        uuid::Uuid::new_v4()
+                    )),
+                    params: codex_app_server_protocol::ModelListParams {
+                        model_provider: Some(provider.clone()),
+                        ..Default::default()
+                    },
+                })
+                .await
+                .map_err(|err| err.to_string());
+            app_event_tx.send(AppEvent::ProviderModelsLoaded { provider, result });
+        });
+    }
+
     pub(super) fn fetch_plugin_detail(
         &mut self,
         app_server: &AppServerSession,

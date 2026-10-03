@@ -1116,6 +1116,11 @@ client_request_definitions! {
         serialization: None,
         response: v2::ModelListResponse,
     },
+    ModelProviderList => "modelProvider/list" {
+        params: v2::ModelProviderListParams,
+        serialization: None,
+        response: v2::ModelProviderListResponse,
+    },
     GatewayOAuthRead => "account/gatewayOAuth/read" {
         params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: None,
@@ -3684,6 +3689,7 @@ mod tests {
                 "id": 6,
                 "params": {
                     "limit": null,
+                    "modelProvider": null,
                     "cursor": null,
                     "includeHidden": null
                 }

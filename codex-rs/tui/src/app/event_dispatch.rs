@@ -1418,6 +1418,63 @@ impl App {
             AppEvent::HooksLoaded { cwd, result } => {
                 self.chat_widget.on_hooks_loaded(cwd, result);
             }
+            AppEvent::FetchModelProviders => {
+                self.fetch_model_providers(app_server);
+            }
+            AppEvent::ModelProvidersLoaded { result } => {
+                self.chat_widget.on_model_providers_loaded(result);
+            }
+            AppEvent::FetchProviderModels { provider } => {
+                self.fetch_provider_models(app_server, provider);
+            }
+            AppEvent::ProviderModelsLoaded { provider, result } => {
+                self.chat_widget.on_provider_models_loaded(provider, result);
+            }
+            AppEvent::ProviderModelChosen { provider, model } => {
+                self.chat_widget.open_provider_apply_prompt(provider, model);
+            }
+            AppEvent::ApplyProviderSelection {
+                provider,
+                model,
+                persist,
+            } => {
+                if persist {
+                    let mut edits = vec![crate::config_update::replace_config_value(
+                        "model_provider",
+                        serde_json::json!(provider),
+                    )];
+                    edits.extend(crate::config_update::build_model_selection_edits(
+                        &model,
+                        None::<String>,
+                    ));
+                    if let Err(err) = self
+                        .persist_model_defaults(
+                            app_server.request_handle(),
+                            edits,
+                            "default provider and model",
+                        )
+                        .await
+                    {
+                        self.chat_widget.add_error_message(format!(
+                            "Failed to save default provider: {}",
+                            format_config_error(&err)
+                        ));
+                        return Ok(AppRunControl::Continue);
+                    }
+                }
+                // New threads read these for the rest of this process; the running thread keeps
+                // its provider, so switching always starts fresh.
+                self.harness_overrides.model_provider = Some(provider.clone());
+                self.harness_overrides.model = Some(model.clone());
+                app_server.model_provider_override = Some(provider.clone());
+                self.start_fresh_session(
+                    tui, app_server, /*session_start_source*/ None,
+                    /*initial_user_message*/ None, /*new_thread_name*/ None,
+                )
+                .await;
+                self.chat_widget
+                    .add_info_message(format!("Using {model} on {provider}"), /*hint*/ None);
+            }
             AppEvent::FetchMarketplaceAdd { cwd, source } => {
                 self.fetch_marketplace_add(app_server, cwd, source);
             }
