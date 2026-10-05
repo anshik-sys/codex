@@ -772,6 +772,9 @@ impl TurnContext {
             .features
             .apps_enabled_for_auth(uses_codex_backend)
             && self.config.orchestrator_mcp_enabled
+            // ChatGPT app tools cost ~34k prompt tokens per request and are not coding tools;
+            // OpenRouter cannot defer them because its models ignore `tool_search`.
+            && !self.config.model_provider.is_openrouter()
     }
 
     pub(crate) async fn with_model(

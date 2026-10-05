@@ -2,6 +2,16 @@
 
 This file is committed so daily context follows the code across worktrees.
 
+## 2026-10-05 — openrouter requests shed chatgpt app tools
+
+OpenRouter replies were slow. Session logs showed about 52,600 input tokens per request on OpenRouter versus 21,700 on OpenAI, with 13.1 s before the first token on `deepseek-v4-flash` against 1.6 s on `gpt-5.6-sol`. A captured request body was 227,136 characters. Tools took 182,606 of them, and seven ChatGPT app tools (`mcp__codex_apps__*`: `chatgpt_space` 62,645, `sites` 45,481, `search_service`, `pets`, `plugin_management`, `codex_document_control`, `hotline`) took about 138,000.
+
+OpenAI models avoid this by deferring tools behind `tool_search`, which `supports_search_tool` gates. That was rejected for OpenRouter after a direct test: with a `tool_search` tool and a `defer_loading` function, `gemini-2.5-flash` saw neither (122 input tokens) and said it had no weather tool, so deferred tools would become unreachable. A Codex-side search tool would work on any model but is a large change; deferred.
+
+Chosen: `TurnContext::apps_enabled()` is false when the thread's provider is the built-in OpenRouter. Coding tools and user MCP servers are unchanged. The `/apps` screen still uses its own check in `connectors.rs`. Measured afterwards: the body is 87,793 characters (−61%) with 17 tools, the seven app tools gone and everything else identical. Estimated about 20,000 tokens per request, not yet confirmed by a paid turn. Unverified: that OpenAI sessions still get app tools at runtime, because ChatGPT-auth requests go over a WebSocket the trace log does not capture. The gate only checks `is_openrouter()`.
+
+Also noticed: OpenRouter models get no `apply_patch` tool, because fallback metadata leaves `apply_patch_tool_type` unset. They edit through shell commands instead. A candidate follow-up, to be tested per model.
+
 ## 2026-10-05 — openrouter serves a codex-native catalog to codex
 
 First real run: `codex exec --provider openrouter -m google/gemini-2.5-flash` answered correctly, which confirms the Responses API and key handling. But every start logged `failed to refresh available models: response body exceeds the 1048576 byte limit`, and the model ran on fallback metadata.
