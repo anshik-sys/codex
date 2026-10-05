@@ -572,7 +572,9 @@ other non-default provider fields are not supported"
         ModelProviderInfo {
             name: OPENROUTER_PROVIDER_NAME.into(),
             base_url: Some(OPENROUTER_BASE_URL.into()),
-            model_catalog_url: Some(format!("{OPENROUTER_BASE_URL}/models").into()),
+            model_catalog_url: Some(
+                format!("{OPENROUTER_BASE_URL}/models?supported_parameters=tools").into(),
+            ),
             env_key: Some("OPENROUTER_API_KEY".into()),
             env_key_instructions: Some(
                 "Set OPENROUTER_API_KEY to an OpenRouter API key and retry.".into(),

@@ -2,6 +2,26 @@
 
 This file is committed so daily context follows the code across worktrees.
 
+## 2026-10-05 — openrouter serves a codex-native catalog to codex
+
+First real run: `codex exec --provider openrouter -m google/gemini-2.5-flash` answered correctly, which confirms the Responses API and key handling. But every start logged `failed to refresh available models: response body exceeds the 1048576 byte limit`, and the model ran on fallback metadata.
+
+Measured with curl, responses from `/api/v1/models`:
+
+| Request | Size |
+|---|---|
+| Plain list | 764 KB (`data[]`) |
+| `supported_parameters=tools` | 654 KB, 376 models |
+| `originator: codex_*` header **and** `client_version` | 10.3 MB, a Codex-format `models[]` catalog with 463 entries |
+
+The combination is what Codex sends with every catalog request. The Codex-format entries each carry about 21 KB of `base_instructions`. Earlier smoke tests missed this because their originator was `smoke`.
+
+Rejected: raising the cap and consuming OpenRouter's Codex catalog. It means 10 MB per refresh, and OpenRouter would supply the agent's system prompt. Chosen: OpenRouter's built-in catalog URL is `.../models?supported_parameters=tools`, requested as-is without `client_version`, which yields the plain list the existing adapter decodes. The URL logic now lives in a small `models_request_url` helper with a unit test. Verified against the real API: no size error, 376 models cached. Headroom under the 1 MiB cap is about 38%. If OpenRouter's tool-capable list keeps growing, pagination or a larger OpenRouter-only cap is the next step. Revisit the native catalog only if its metadata proves materially better and dropping its `base_instructions` is acceptable.
+
+Also fixed a regression of 2026-10-03 found the same day: when the feature was off, the built-in `openrouter` entry was removed *after* merging. Because built-ins win the merge, a user's own `[model_providers.openrouter]` vanished too. The built-in is now dropped before the merge; a config test covers both feature states.
+
+Also seen: with the installed 0.160.0 background daemon running, the dev TUI shows "Cannot use the background server — Experimental feature request failed", because the old daemon doesn't know the feature. Use `--no-daemon` or "Run without daemon this time". This is not a bug in this work.
+
 ## 2026-10-03 — working tree lost to a failed nested clone, rebuilt
 
 At 15:33 IST the whole checkout disappeared, including three unpushed local commits and the uncommitted `/provider` work. Cause: at 13:14 a separate Codex session ran `git clone git@github.com:anshik-sys/codex.git .` in the *parent* folder `PROJECTS/codex`. That turn was interrupted, but the clone kept running in the background while this checkout was cloned into `PROJECTS/codex/codex`. After 2 h 19 min GitHub dropped the connection (`fatal: early EOF`). A failed clone into an existing directory empties that directory, so the nested checkout went with it. Files removed this way skip the Trash, and the Time Machine destination was not mounted.

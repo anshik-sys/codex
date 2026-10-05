@@ -128,15 +128,7 @@ impl OpenAiModelsEndpoint {
         )
         .await?;
         let api_auth = resolved.auth;
-        let request_url = match self.provider_info.model_catalog_url.as_deref() {
-            Some(catalog_url) => ModelsClient::<ReqwestTransport>::catalog_request_url(
-                &api_provider,
-                catalog_url,
-                client_version,
-            )
-            .map_err(map_api_error)?,
-            None => ModelsClient::<ReqwestTransport>::request_url(&api_provider, client_version),
-        };
+        let request_url = models_request_url(&self.provider_info, &api_provider, client_version)?;
         let auth_telemetry = auth_header_telemetry(api_auth.as_ref());
         let agent_identity_telemetry = if let Some(CodexAuth::AgentIdentity(auth)) = auth.as_ref() {
             Some(agent_identity_telemetry(auth))
@@ -218,6 +210,28 @@ impl OpenAiModelsEndpoint {
             .as_ref()
             .is_some_and(|auth_manager| auth_manager.codex_api_key_env_enabled());
         collect_auth_env_telemetry(&self.provider_info, codex_api_key_env_enabled)
+    }
+}
+
+fn models_request_url(
+    provider_info: &ModelProviderInfo,
+    api_provider: &codex_api::Provider,
+    client_version: &str,
+) -> CoreResult<String> {
+    match provider_info.model_catalog_url.as_deref() {
+        // A Codex originator plus `client_version` makes OpenRouter serve a ~10 MB Codex-format
+        // catalog whose `base_instructions` would replace Codex's prompt; request its plain list.
+        Some(catalog_url) if provider_info.is_openrouter() => Ok(catalog_url.to_string()),
+        Some(catalog_url) => ModelsClient::<ReqwestTransport>::catalog_request_url(
+            api_provider,
+            catalog_url,
+            client_version,
+        )
+        .map_err(map_api_error),
+        None => Ok(ModelsClient::<ReqwestTransport>::request_url(
+            api_provider,
+            client_version,
+        )),
     }
 }
 
@@ -1124,5 +1138,18 @@ mod tests {
         let message = error.to_string();
         assert!(message.contains("OpenRouter models response"), "{message}");
         assert!(!message.contains("sk-or-secret"), "{message}");
+    }
+
+    #[test]
+    fn openrouter_catalog_request_omits_client_version() {
+        let provider = ModelProviderInfo::create_openrouter_provider();
+        let api_provider = provider
+            .to_api_provider(/*auth_mode*/ None)
+            .expect("api provider");
+
+        assert_eq!(
+            models_request_url(&provider, &api_provider, "0.0.0").expect("request url"),
+            "https://openrouter.ai/api/v1/models?supported_parameters=tools"
+        );
     }
 }

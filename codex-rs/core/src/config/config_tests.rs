@@ -13461,3 +13461,47 @@ fn sqlite_home_env_conflict_reports_an_override() -> std::io::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn user_openrouter_provider_survives_when_multi_provider_selection_is_disabled()
+-> std::io::Result<()> {
+    for (features, expected_base_url) in [
+        ("", "https://example.test/openrouter"),
+        (
+            "[features]\nmulti_provider_selection = true\n",
+            codex_model_provider_info::OPENROUTER_BASE_URL,
+        ),
+    ] {
+        let cfg = toml::from_str::<ConfigToml>(&format!(
+            r#"
+model_provider = "openrouter"
+model = "x/agent"
+
+[model_providers.openrouter]
+name = "OpenRouter"
+base_url = "https://example.test/openrouter"
+
+{features}"#
+        ))
+        .expect("config should parse");
+        let config_layer_stack = ConfigLayerStack::new(
+            Vec::new(),
+            ConfigRequirements::default(),
+            ConfigRequirementsToml::default(),
+        )?;
+        let config = Config::load_config_with_layer_stack(
+            LOCAL_FS.as_ref(),
+            cfg,
+            ConfigOverrides::default(),
+            tempdir()?.abs(),
+            config_layer_stack,
+        )
+        .await?;
+
+        assert_eq!(
+            config.model_provider.base_url.as_deref(),
+            Some(expected_base_url)
+        );
+    }
+    Ok(())
+}
