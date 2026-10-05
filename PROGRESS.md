@@ -13,9 +13,12 @@ Rebuilt the same day on a fresh `--depth 50` clone at `19e554bb7`:
 
 State when the session ended (2026-10-03):
 - **Verified after the rebuild:** everything compiles, tests included. Test counts match the pre-loss runs: app-server-protocol 319, exec 64 + 1 + 103, model-provider 104 (including the OpenRouter tests), utils-cli 42, plus 33 and 21.
-- **Not yet re-run:** the TUI tests. The two `/provider` snapshot files (`provider_popup_readiness`, `provider_apply_prompt`) were not restored. Next session: run `RUST_MIN_STACK=16777216 cargo test -p codex-tui --lib provider_picker_tests`, compare the generated `.snap.new` files with the expected output in the "/provider in the TUI" entry, then rename them to `.snap`.
-- **Also not re-run:** the app-server `model_list` suite, the debug binary build, and the live smoke test.
-- **Commits:** the earlier local commits (`f9081bd2c`, `b45b74b89`, `615cc727c`) no longer exist. Everything is uncommitted again on top of `19e554bb7`.
+- **Verified on 2026-10-05:**
+  - The `/provider` TUI tests pass (3/3). Their two snapshots were regenerated and match the pre-loss output line for line.
+  - The app-server `model_list` suite passes 18/20 at `--test-threads=2`. The two Bedrock `bedrock_model_list_advertises_ultrafast_without_changing_default` cases fail under load but pass alone, the same timeout pattern as before the loss.
+  - The debug binary builds.
+- **Not re-run:** the live OpenRouter smoke test.
+- **Commits:** the earlier local commits (`f9081bd2c`, `b45b74b89`, `615cc727c`) no longer exist. The rebuilt work was committed as `0b54bc0` and pushed to the fork; the snapshot files follow in a separate commit.
 
 Lesson: clone into a new named subdirectory, never `.`, and never run two clones where one target is inside the other. A full-history clone of this repo is slow enough to outlive the session that started it.
 

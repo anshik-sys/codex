@@ -1,6 +1,6 @@
 # OpenRouter and multi-provider selection handoff
 
-Status (2026-10-03, end of day): every step through exec model validation and TUI `/provider` is implemented, uncommitted on top of `19e554bb7`. The checkout was lost and rebuilt the same day; see the PROGRESS.md entry "working tree lost to a failed nested clone, rebuilt" for what was re-verified. Open: TUI test re-run and snapshot acceptance, the app-server RPC tests in Remaining steps 1–2, a live OpenRouter inference turn, and `/model` showing the startup provider's catalog after a switch.
+Status (2026-10-03, end of day): every step through exec model validation and TUI `/provider` is implemented, committed as `0b54bc0` on the fork. The checkout was lost and rebuilt the same day; see the PROGRESS.md entry "working tree lost to a failed nested clone, rebuilt" for what was re-verified. Open: the app-server RPC tests in Remaining steps 1–2, a live OpenRouter inference turn, and `/model` showing the startup provider's catalog after a switch.
 
 ## Goal
 

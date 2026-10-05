@@ -1,0 +1,13 @@
+---
+source: tui/src/chatwidget/tests/provider_picker_tests.rs
+assertion_line: 52
+expression: "render_bottom_popup(&chat, 80)"
+---
+      Use x/agent on openrouter?
+› As  Both options start a new chat
+
+  GP
+    › 1. Use once        Until Codex exits; config is unchanged
+      2. Set as default  Save model_provider and model to config
+
+      enter select · esc back
