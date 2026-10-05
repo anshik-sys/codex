@@ -1,9 +1,9 @@
 //! `/provider` stages: provider readiness, the use-once/default choice, and load failures.
 
 use super::*;
+use crate::app_event::ProviderSwitch;
 use codex_app_server_protocol::ModelProvider;
 use codex_app_server_protocol::ModelProviderListResponse;
-use pretty_assertions::assert_eq;
 
 fn provider(id: &str, name: &str, ready: bool, env_var: Option<&str>) -> ModelProvider {
     ModelProvider {
@@ -45,7 +45,7 @@ async fn provider_popup_shows_readiness_and_selects_provider() {
 }
 
 #[tokio::test]
-async fn provider_apply_prompt_offers_use_once_and_default() {
+async fn provider_apply_prompt_offers_continue_new_chat_and_default() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
     chat.open_provider_apply_prompt("openrouter".to_string(), "x/agent".to_string());
 
@@ -54,19 +54,23 @@ async fn provider_apply_prompt_offers_use_once_and_default() {
         render_bottom_popup(&chat, /*width*/ 80)
     );
 
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::ApplyProviderSelection { provider, model, action: ProviderSwitch::Continue })
+            if provider == "openrouter" && model == "x/agent"
+    );
+
+    chat.open_provider_apply_prompt("openrouter".to_string(), "x/agent".to_string());
+    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
-    let Ok(AppEvent::ApplyProviderSelection {
-        provider,
-        model,
-        persist,
-    }) = rx.try_recv()
-    else {
-        panic!("expected ApplyProviderSelection");
-    };
-    assert_eq!(
-        (provider.as_str(), model.as_str(), persist),
-        ("openrouter", "x/agent", true)
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::ApplyProviderSelection {
+            action: ProviderSwitch::SetDefault,
+            ..
+        })
     );
 }
 

@@ -4,10 +4,10 @@ assertion_line: 52
 expression: "render_bottom_popup(&chat, 80)"
 ---
       Use x/agent on openrouter?
-› As  Both options start a new chat
+› As
 
-  GP
-    › 1. Use once        Until Codex exits; config is unchanged
-      2. Set as default  Save model_provider and model to config
+  GP› 1. Continue this conversation  Fork this chat onto the new provider
+      2. Use once                    New chat; config is unchanged
+      3. Set as default              New chat; save the pair to config
 
       enter select · esc back

@@ -282,6 +282,17 @@ pub(crate) struct AgentPickerThreadRefresh {
     pub(crate) archived_thread_ids: std::collections::HashSet<ThreadId>,
 }
 
+/// How `/provider` applies a chosen provider/model pair.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProviderSwitch {
+    /// Fork the current conversation onto the pair.
+    Continue,
+    /// Start a new chat on the pair until Codex exits.
+    NewChat,
+    /// Save the pair to config, then start a new chat on it.
+    SetDefault,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, IntoStaticStr)]
 pub(crate) enum AppEvent {
@@ -957,11 +968,11 @@ pub(crate) enum AppEvent {
         model: String,
     },
 
-    /// Start a fresh thread on the pair, persisting it first when `persist` is set.
+    /// Switch to the pair as `action` describes.
     ApplyProviderSelection {
         provider: String,
         model: String,
-        persist: bool,
+        action: ProviderSwitch,
     },
 
     /// Result of fetching lifecycle hook inventory.

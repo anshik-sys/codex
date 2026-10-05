@@ -1,8 +1,9 @@
-//! `/provider`: pick a provider, then one of its models, then whether the pair applies once or
-//! becomes the default. Every path starts a fresh thread because a running thread keeps the
-//! provider it started with.
+//! `/provider`: pick a provider, then one of its models, then how to apply the pair. A running
+//! thread keeps the provider it started with, so every path continues on a new thread: a fork of
+//! the current conversation, or a new chat.
 
 use super::*;
+use crate::app_event::ProviderSwitch;
 use codex_app_server_protocol::ModelListResponse;
 use codex_app_server_protocol::ModelProviderListResponse;
 
@@ -108,7 +109,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_provider_apply_prompt(&mut self, provider: String, model: String) {
-        let item = |name: &str, description: &str, persist: bool| {
+        let item = |name: &str, description: &str, action: ProviderSwitch| {
             let provider = provider.clone();
             let model = model.clone();
             SelectionItem {
@@ -118,7 +119,7 @@ impl ChatWidget {
                     tx.send(AppEvent::ApplyProviderSelection {
                         provider: provider.clone(),
                         model: model.clone(),
-                        persist,
+                        action,
                     });
                 })],
                 dismiss_on_select: true,
@@ -127,14 +128,22 @@ impl ChatWidget {
         };
         self.bottom_pane.show_selection_view(SelectionViewParams {
             title: Some(format!("Use {model} on {provider}?")),
-            subtitle: Some("Both options start a new chat".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
             items: vec![
-                item("Use once", "Until Codex exits; config is unchanged", false),
+                item(
+                    "Continue this conversation",
+                    "Fork this chat onto the new provider",
+                    ProviderSwitch::Continue,
+                ),
+                item(
+                    "Use once",
+                    "New chat; config is unchanged",
+                    ProviderSwitch::NewChat,
+                ),
                 item(
                     "Set as default",
-                    "Save model_provider and model to config",
-                    true,
+                    "New chat; save the pair to config",
+                    ProviderSwitch::SetDefault,
                 ),
             ],
             ..SelectionViewParams::confirmation()

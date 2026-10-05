@@ -145,6 +145,49 @@ use codex_model_provider::ResponsesConnectionKey;
 use codex_model_provider::SharedModelProvider;
 use codex_model_provider::WorkspaceRoutingContext;
 use codex_model_provider::create_model_provider;
+/// OpenRouter drops `custom_tool_call` items, so history from a freeform tool (such as an OpenAI
+/// thread's `apply_patch`) would vanish after a provider switch. Resend each call and its output
+/// as a function call with the raw input under `input`, matching the JSON `apply_patch` form.
+fn convert_custom_tool_items_to_functions(input: &mut [ResponseItem]) {
+    for item in input.iter_mut() {
+        let converted = match std::mem::replace(item, ResponseItem::Other) {
+            ResponseItem::CustomToolCall {
+                id,
+                call_id,
+                name,
+                namespace,
+                input,
+                internal_chat_message_metadata_passthrough,
+                ..
+            } => ResponseItem::FunctionCall {
+                id,
+                name,
+                namespace,
+                arguments: serde_json::json!({ "input": input }).to_string(),
+                encrypted_function_args: None,
+                call_id,
+                internal_chat_message_metadata_passthrough,
+            },
+            ResponseItem::CustomToolCallOutput {
+                id,
+                call_id,
+                name,
+                output,
+                internal_chat_message_metadata_passthrough,
+            } => ResponseItem::FunctionCallOutput {
+                id,
+                call_id: Some(call_id),
+                name,
+                namespace: None,
+                output,
+                internal_chat_message_metadata_passthrough,
+            },
+            other => other,
+        };
+        *item = converted;
+    }
+}
+
 #[cfg(test)]
 use codex_model_provider_info::DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS;
 use codex_model_provider_info::ModelProviderInfo;
@@ -993,6 +1036,9 @@ impl ModelClient {
             for item in &mut input {
                 item.clear_tool_result_metadata();
             }
+        }
+        if self.state.provider.info().is_openrouter() {
+            convert_custom_tool_items_to_functions(&mut input);
         }
         let client_metadata = responses_metadata.client_metadata(include_internal);
         let request = ResponsesApiRequest {

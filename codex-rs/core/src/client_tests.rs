@@ -2130,3 +2130,59 @@ async fn intercepted_output_reaches_trace_and_websocket_bookkeeping() -> anyhow:
     assert_eq!(recorded["output_items"], serde_json::to_value(&delivered)?);
     Ok(())
 }
+
+#[test]
+fn openrouter_history_resends_custom_tool_items_as_functions() {
+    use codex_protocol::models::FunctionCallOutputPayload;
+    use codex_protocol::models::ResponseItem;
+
+    let patch = "*** Begin Patch\n*** Add File: a.txt\n+port = 4417\n*** End Patch";
+    let mut input = vec![
+        ResponseItem::CustomToolCall {
+            id: None,
+            status: Some("completed".to_string()),
+            call_id: "call-1".to_string(),
+            name: "apply_patch".to_string(),
+            namespace: None,
+            input: patch.to_string(),
+            internal_chat_message_metadata_passthrough: None,
+        },
+        ResponseItem::CustomToolCallOutput {
+            id: None,
+            call_id: "call-1".to_string(),
+            name: None,
+            output: FunctionCallOutputPayload::from_text("Success.".to_string()),
+            internal_chat_message_metadata_passthrough: None,
+        },
+    ];
+
+    super::convert_custom_tool_items_to_functions(&mut input);
+
+    let [
+        ResponseItem::FunctionCall {
+            name,
+            arguments,
+            call_id,
+            ..
+        },
+        ResponseItem::FunctionCallOutput {
+            call_id: output_call_id,
+            output,
+            ..
+        },
+    ] = input.as_slice()
+    else {
+        panic!("expected function items, got {input:?}");
+    };
+    assert_eq!(name, "apply_patch");
+    assert_eq!(call_id, "call-1");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(arguments).unwrap(),
+        serde_json::json!({ "input": patch })
+    );
+    assert_eq!(output_call_id.as_deref(), Some("call-1"));
+    assert_eq!(
+        output,
+        &FunctionCallOutputPayload::from_text("Success.".to_string())
+    );
+}

@@ -558,8 +558,14 @@ impl App {
                             &self.chat_widget.config_ref().workspace_roots,
                         );
                     }
-                    fork_config.model_provider_id.clone_from(&self.chat_widget.config_ref().model_provider_id);
-                    fork_config.model = Some(self.chat_widget.current_model().to_string());
+                    // `/provider` "Continue this conversation" forks onto the chosen pair.
+                    if let Some((provider, model)) = self.pending_provider_fork.take() {
+                        fork_config.model_provider_id = provider;
+                        fork_config.model = Some(model);
+                    } else {
+                        fork_config.model_provider_id.clone_from(&self.chat_widget.config_ref().model_provider_id);
+                        fork_config.model = Some(self.chat_widget.current_model().to_string());
+                    }
                     fork_config.model_reasoning_effort =
                         self.chat_widget.current_reasoning_effort();
                     let selected_profile = self.selected_server_profile(thread_id);
@@ -1436,9 +1442,9 @@ impl App {
             AppEvent::ApplyProviderSelection {
                 provider,
                 model,
-                persist,
+                action,
             } => {
-                if persist {
+                if action == crate::app_event::ProviderSwitch::SetDefault {
                     let mut edits = vec![crate::config_update::replace_config_value(
                         "model_provider",
                         serde_json::json!(provider),
@@ -1463,17 +1469,25 @@ impl App {
                     }
                 }
                 // New threads read these for the rest of this process; the running thread keeps
-                // its provider, so switching always starts fresh.
+                // its provider, so every switch continues on a new thread.
                 self.harness_overrides.model_provider = Some(provider.clone());
                 self.harness_overrides.model = Some(model.clone());
                 app_server.model_provider_override = Some(provider.clone());
-                self.start_fresh_session(
-                    tui, app_server, /*session_start_source*/ None,
-                    /*initial_user_message*/ None, /*new_thread_name*/ None,
-                )
-                .await;
-                self.chat_widget
-                    .add_info_message(format!("Using {model} on {provider}"), /*hint*/ None);
+                if action == crate::app_event::ProviderSwitch::Continue
+                    && self.chat_widget.thread_id().is_some()
+                {
+                    self.pending_provider_fork = Some((provider, model));
+                    self.app_event_tx
+                        .send(AppEvent::ForkCurrentSession { name: None });
+                } else {
+                    self.start_fresh_session(
+                        tui, app_server, /*session_start_source*/ None,
+                        /*initial_user_message*/ None, /*new_thread_name*/ None,
+                    )
+                    .await;
+                    self.chat_widget
+                        .add_info_message(format!("Using {model} on {provider}"), /*hint*/ None);
+                }
             }
             AppEvent::FetchMarketplaceAdd { cwd, source } => {
                 self.fetch_marketplace_add(app_server, cwd, source);

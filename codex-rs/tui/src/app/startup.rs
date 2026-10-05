@@ -927,6 +927,7 @@ See the Codex keymap documentation for supported actions and examples."
             pending_open_resume_picker: false,
             pending_working_directory_change: None,
             pending_start_managed_worktree: None,
+            pending_provider_fork: None,
             pending_managed_worktree_creation: false,
             pending_managed_worktree_created: None,
             pending_managed_worktree_transition: None,

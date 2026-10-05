@@ -2,6 +2,21 @@
 
 This file is committed so daily context follows the code across worktrees.
 
+## 2026-10-05 — /provider can continue the current conversation
+
+`/provider` used to always start a new chat. Its prompt now offers **Continue this conversation** (fork the current chat onto the chosen pair), **Use once** (new chat), and **Set as default** (save the pair, then new chat). A running thread cannot change provider, so "Continue" is a fork: a new thread id with the same history, while the old thread stays on its provider. "Continue" with no current thread falls back to a new chat.
+
+Before building, measured what OpenRouter does with OpenAI history:
+- Messages and `function_call` items carry over. A real `exec fork` from a `gpt-5.6-sol` turn onto `gemini-2.5-flash` recalled a secret word and a shell result.
+- Encrypted `reasoning` items are ignored without error; nobody but OpenAI could read them anyway.
+- `custom_tool_call` items, which is how freeform `apply_patch` edits appear in OpenAI threads (83 across the user's last 21 sessions), are dropped. With a history containing a patch that wrote `port = 4417`, the model answered `8080`.
+
+So when the provider is OpenRouter, `ModelClient` now resends every `custom_tool_call` / `custom_tool_call_output` as `function_call` / `function_call_output`, with the raw input under `{"input": …}`. That matches the JSON `apply_patch` form OpenRouter models use. With the converted history, the same question returned `4417`. A unit test covers the conversion.
+
+TUI: `ProviderSwitch` replaces the `persist` flag. "Continue" sets the same overrides as a new chat, stores the pair in `App::pending_provider_fork`, and reuses the existing `ForkCurrentSession` handler, which takes the pair instead of the current model and provider.
+
+Unverified end to end: a real fork of a thread containing freeform `custom_tool_call` items. In the dev home, `gpt-5.6-sol` recorded its edit as a plain `function_call`, so that run exercised the fork but not the conversion. Also unverified: the TUI flow in a real terminal.
+
 ## 2026-10-05 — /model lists the switched provider's models
 
 After `/provider`, `/model` still listed OpenAI models. `/model` re-fetches on every open (`FetchModels` → `AppServerSession::fetch_models`), but it sent `model/list` without `modelProvider`. The app-server's active provider stays the startup one, because only new threads change provider, so the startup catalog came back. `fetch_models` now sends `model_provider_override`, which `/provider` and `--provider` set. Normal sessions send `None` as before.
