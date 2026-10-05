@@ -54,6 +54,21 @@ use crate::tools::handlers::view_image_spec::ViewImageToolOptions;
 use crate::tools::hosted_spec::WebSearchToolOptions;
 use crate::tools::hosted_spec::create_web_search_tool;
 use crate::tools::multi_agent_tool::multi_agent_v2_handler;
+use codex_protocol::openai_models::ModelPreset;
+/// Models the spawn tools describe. OpenRouter catalogs hold hundreds of unranked models, so its
+/// threads list their own model first; the description only has room for a few.
+fn spawn_agent_models(turn_context: &TurnContext) -> Vec<ModelPreset> {
+    let mut models = turn_context.available_models.clone();
+    if turn_context.config.model_provider.is_openrouter() {
+        let current = &turn_context.model_info().slug;
+        if let Some(index) = models.iter().position(|model| &model.model == current) {
+            let model = models.remove(index);
+            models.insert(0, model);
+        }
+    }
+    models
+}
+
 #[cfg(test)]
 use crate::tools::registry::RegisteredTool;
 use crate::tools::registry::ToolExposure;
@@ -1304,7 +1319,7 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 multi_agent_v2_handler(
                     SpawnAgentHandlerV2::new(
                         SpawnAgentToolOptions {
-                            available_models: turn_context.available_models.clone(),
+                            available_models: spawn_agent_models(turn_context),
                             multi_agent_version: turn_context.multi_agent_version,
                             model_catalog_in_context: turn_context
                                 .config
@@ -1392,7 +1407,7 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
             };
             registry.add_with_exposure(
                 SpawnAgentHandler::new(SpawnAgentToolOptions {
-                    available_models: turn_context.available_models.clone(),
+                    available_models: spawn_agent_models(turn_context),
                     multi_agent_version: turn_context.multi_agent_version,
                     model_catalog_in_context: turn_context
                         .config

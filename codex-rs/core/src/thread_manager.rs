@@ -416,6 +416,12 @@ pub(crate) struct ThreadManagerState {
     agent_control_factory: Option<AgentControlFactory>,
     auth_manager: Arc<AuthManager>,
     models_manager: SharedModelsManager,
+    /// Provider `models_manager` serves; `None` means every thread shares it.
+    models_provider_id: Option<String>,
+    /// Catalogs for threads started on another provider (e.g. after `/provider`), by provider id.
+    // ponytail: never evicted or rebuilt; a provider redefined in config keeps its first manager
+    // until the app-server restarts.
+    other_provider_models_managers: std::sync::Mutex<HashMap<String, SharedModelsManager>>,
     git_root_discovery: Arc<GitRootDiscovery>,
     environment_manager: Arc<EnvironmentManager>,
     starting_mcp_runtimes: std::sync::Mutex<Vec<std::sync::Weak<AtomicBool>>>,
@@ -578,6 +584,8 @@ impl ThreadManager {
                 thread_id_generator: default_thread_id_generator(),
                 agent_control_factory: None,
                 models_manager,
+                models_provider_id: Some(config.model_provider_id.clone()),
+                other_provider_models_managers: Default::default(),
                 git_root_discovery: Arc::default(),
                 environment_manager,
                 starting_mcp_runtimes: std::sync::Mutex::new(Vec::new()),
@@ -751,6 +759,8 @@ impl ThreadManager {
                 agent_control_factory: None,
                 models_manager: create_model_provider(provider, Some(auth_manager.clone()))
                     .models_manager(codex_home, /*config_model_catalog*/ None),
+                models_provider_id: None,
+                other_provider_models_managers: Default::default(),
                 git_root_discovery: Arc::default(),
                 environment_manager,
                 starting_mcp_runtimes: std::sync::Mutex::new(Vec::new()),
@@ -1613,6 +1623,30 @@ impl ThreadManager {
 }
 
 impl ThreadManagerState {
+    /// Returns the catalog for the thread's own provider, so model metadata and the sub-agent
+    /// model list match it rather than the provider the app-server started with.
+    fn models_manager_for(
+        &self,
+        config: &Config,
+        auth_manager: &Arc<AuthManager>,
+    ) -> SharedModelsManager {
+        match self.models_provider_id.as_deref() {
+            Some(id) if id != config.model_provider_id => self
+                .other_provider_models_managers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .entry(config.model_provider_id.clone())
+                .or_insert_with(|| {
+                    // A configured catalog describes the startup provider's models only.
+                    let mut config = config.clone();
+                    config.model_catalog = None;
+                    build_models_manager(&config, Arc::clone(auth_manager))
+                })
+                .clone(),
+            _ => Arc::clone(&self.models_manager),
+        }
+    }
+
     pub(crate) fn shared_thread_instructions_provider(
         &self,
         root_thread_id: ThreadId,
@@ -2293,6 +2327,7 @@ impl ThreadManagerState {
         };
         let attachment_source =
             forked_from_thread_id.filter(|_| matches!(&initial_history, InitialHistory::Forked(_)));
+        let models_manager = self.models_manager_for(&config, &auth_manager);
         let spawn_result = Session::spawn(SessionSpawnArgs {
             startup,
             config,
@@ -2300,7 +2335,7 @@ impl ThreadManagerState {
             instructions,
             installation_id: self.installation_id.clone(),
             auth_manager,
-            models_manager: Arc::clone(&self.models_manager),
+            models_manager,
             git_root_discovery: Arc::clone(&self.git_root_discovery),
             environment_manager: Arc::clone(&self.environment_manager),
             skills_service: Arc::clone(&self.skills_service),

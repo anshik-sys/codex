@@ -3316,3 +3316,44 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
         1,
     );
 }
+
+#[tokio::test]
+async fn threads_on_another_provider_get_that_providers_catalog() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let shared = build_models_manager(&config, auth_manager.clone());
+    let manager = ThreadManager::new(
+        &config,
+        auth_manager.clone(),
+        Arc::clone(&shared),
+        crate::CodexAppsToolsCache::default(),
+        SessionSource::Exec,
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        empty_extension_registry(),
+        Arc::new(crate::test_support::EmptyUserInstructionsProvider),
+        /*analytics_events_client*/ None,
+        passthrough_image_store(),
+        thread_store_from_config(&config, /*state_db*/ None),
+        /*agent_graph_store*/ None,
+        TEST_INSTALLATION_ID.to_string(),
+        /*attestation_provider*/ None,
+        /*external_time_provider*/ None,
+    );
+    let mut other = config.clone();
+    other.model_provider_id = codex_model_provider_info::OPENROUTER_PROVIDER_ID.to_string();
+    other.model_provider =
+        codex_model_provider_info::ModelProviderInfo::create_openrouter_provider();
+
+    let same_provider = manager.state.models_manager_for(&config, &auth_manager);
+    let first = manager.state.models_manager_for(&other, &auth_manager);
+    let second = manager.state.models_manager_for(&other, &auth_manager);
+
+    assert!(Arc::ptr_eq(&same_provider, &shared));
+    assert!(!Arc::ptr_eq(&first, &shared));
+    assert!(Arc::ptr_eq(&first, &second));
+}

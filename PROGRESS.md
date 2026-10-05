@@ -2,6 +2,18 @@
 
 This file is committed so daily context follows the code across worktrees.
 
+## 2026-10-05 — threads use their own provider's model catalog
+
+The sub-agent tool listed OpenAI models after `/provider`. The root cause was broader: `ThreadManagerState` passed every thread the single models manager built for the app-server's *startup* provider. A thread switched to OpenRouter therefore looked up its model in the OpenAI catalog. It got generic fallback metadata (no JSON `apply_patch`, default context window), and the spawn tool advertised OpenAI models. The earlier OpenRouter fixes only fully applied when Codex *started* on OpenRouter, e.g. `exec --provider openrouter`, which is how they were measured.
+
+Fix: `models_manager_for` gives a thread on another provider a manager built from its own config, cached per provider id. It drops `model_catalog`, which describes the startup provider only, matching the app-server's targeted `model/list`. Same-provider threads keep the shared manager. The cache is never evicted (ponytail comment). A unit test checks shared versus per-provider versus reused.
+
+Verified with a real turn: an app-server started on OpenAI in `~/.codex-dev`, then `thread/start` with `modelProvider: openrouter`. The OpenRouter request carried the JSON `apply_patch` tool, so its metadata came from the OpenRouter catalog, and the spawn tool listed no GPT models.
+
+Its first few entries were then `aion-labs/…`. The spawn description only fits a handful (`MAX_SPAWN_AGENT_MODEL_OVERRIDES`), and the adapter sorts 376 unranked models by name. OpenRouter offers no useful ranking: its default order is newest-first, and `order=top-weekly` returned an identical list. So OpenRouter threads now list their own model first; any OpenRouter id still validates as an override against the full catalog. OpenAI's curated order is unchanged.
+
+Flaky under load, passes alone 3/3: `multi_agents::tests::send_input_interrupts_before_prompt`.
+
 ## 2026-10-05 — /provider can continue the current conversation
 
 `/provider` used to always start a new chat. Its prompt now offers **Continue this conversation** (fork the current chat onto the chosen pair), **Use once** (new chat), and **Set as default** (save the pair, then new chat). A running thread cannot change provider, so "Continue" is a fork: a new thread id with the same history, while the old thread stays on its provider. "Continue" with no current thread falls back to a new chat.
