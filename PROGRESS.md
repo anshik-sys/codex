@@ -23,6 +23,8 @@ The dev build now runs with its own home via a `~/.zshrc` alias: `codex-dev` →
 
 The alias also passes `--no-daemon`. Without it, the dev build tries to install a background server into `~/.codex-dev/packages` and fails with "this CLI has no complete local package", because a cargo build is not a packaged release. Under the shared `~/.codex`, it had instead reached the installed 0.160.0 daemon, which rejects the new feature. `--no-daemon` before a subcommand works for `exec`, `resume`, and `login`; only `codex agents` rejects it, since the agents overview needs a shared server.
 
+Later the same day, the *installed* 0.160.0 `codex` showed "Cannot use the background server — Experimental feature request failed". Its own config loaded fine, and its daemon (running since 2026-10-03 15:05) logged the `experimentalFeature/list` request with no error. The cause was not pinned down. `codex app-server daemon restart` fixed it, so if the popup returns, restart the daemon first.
+
 ## 2026-10-05 — openrouter requests shed chatgpt app tools
 
 OpenRouter replies were slow. Session logs showed about 52,600 input tokens per request on OpenRouter versus 21,700 on OpenAI, with 13.1 s before the first token on `deepseek-v4-flash` against 1.6 s on `gpt-5.6-sol`. A captured request body was 227,136 characters. Tools took 182,606 of them, and seven ChatGPT app tools (`mcp__codex_apps__*`: `chatgpt_space` 62,645, `sites` 45,481, `search_service`, `pets`, `plugin_management`, `codex_document_control`, `hotline`) took about 138,000.
