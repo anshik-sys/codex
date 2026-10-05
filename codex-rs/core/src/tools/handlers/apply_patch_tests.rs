@@ -83,7 +83,10 @@ async fn pre_tool_use_payload_uses_freeform_patch_input() {
         input: patch.to_string(),
     };
     let invocation = invocation_for_payload(payload).await;
-    let handler = ApplyPatchHandler::default();
+    let handler = ApplyPatchHandler::new(
+        /*multi_environment*/ false,
+        ApplyPatchToolType::Freeform,
+    );
 
     assert_eq!(
         handler.pre_tool_use_payload(&invocation),
@@ -95,6 +98,38 @@ async fn pre_tool_use_payload_uses_freeform_patch_input() {
 }
 
 #[tokio::test]
+async fn function_form_reads_patch_from_input_argument() {
+    let patch = sample_patch();
+    let payload = ToolPayload::Function {
+        arguments: json!({ "input": patch }).to_string(),
+    };
+    let invocation = invocation_for_payload(payload.clone()).await;
+    let handler = ApplyPatchHandler::new(
+        /*multi_environment*/ false,
+        ApplyPatchToolType::Function,
+    );
+
+    assert!(handler.matches_kind(&payload));
+    assert!(!handler.matches_kind(&ToolPayload::Custom {
+        input: patch.to_string(),
+    }));
+    assert!(handler.create_diff_consumer().is_none());
+    assert_eq!(
+        handler.pre_tool_use_payload(&invocation),
+        Some(PreToolUsePayload {
+            tool_name: HookToolName::apply_patch(),
+            tool_input: json!({ "command": patch }),
+        })
+    );
+    assert_eq!(
+        patch_input(&ToolPayload::Function {
+            arguments: "not json".to_string(),
+        }),
+        None
+    );
+}
+
+#[tokio::test]
 async fn post_tool_use_payload_uses_patch_input_and_tool_output() {
     let patch = sample_patch();
     let payload = ToolPayload::Custom {
@@ -102,7 +137,10 @@ async fn post_tool_use_payload_uses_patch_input_and_tool_output() {
     };
     let invocation = invocation_for_payload(payload).await;
     let output = ApplyPatchToolOutput::from_text("Success. Updated files.".to_string());
-    let handler = ApplyPatchHandler::default();
+    let handler = ApplyPatchHandler::new(
+        /*multi_environment*/ false,
+        ApplyPatchToolType::Freeform,
+    );
 
     assert_eq!(
         handler.post_tool_use_payload(&invocation, &output),

@@ -2,6 +2,19 @@
 
 This file is committed so daily context follows the code across worktrees.
 
+## 2026-10-05 — apply_patch for openrouter models as a json function
+
+OpenRouter models had no `apply_patch` tool, though the base instructions tell them to use one. The only tool type, `ApplyPatchToolType::Freeform`, is a Responses `custom` tool with a Lark grammar. A direct test showed OpenRouter drops `custom` tools entirely: 20 input tokens, and the model asked what the tool was. Freeform was therefore not an option.
+
+Added `ApplyPatchToolType::Function`: the same patch engine and handler, called as `{"input": "<patch>"}`. The OpenRouter adapter sets it on every decoded model. The handler accepts the form matching its configured type; hooks see the same `command` input; and the streaming patch preview is off for the function form, because arguments stream as escaped JSON. No generated schema references the enum, so nothing was regenerated.
+
+Real runs on `google/gemini-2.5-flash` with `exec -s workspace-write` (each a few cents):
+1. A first description saying "`@@` lines locate a hunk" made the model write unified-diff ranges (`@@ -1 +1,2 @@`). Nine patches failed (190,034 tokens).
+2. With an explicit example and "no line numbers", it put the changed line itself after `@@`, which Codex treats as an anchor *above* the change. Two failures, then success.
+3. After saying the `@@` line must be above the change: two runs editing a function body and a later line both ended correct. One succeeded first try; the other after one failure.
+
+Gotcha for testing: `exec` in an untrusted temporary folder is read-only, and the model then reports "sandbox restrictions". Pass `-s workspace-write`. Weaker models may still need a retry; quality is per model and not measured beyond Gemini Flash.
+
 ## 2026-10-05 — dev build isolated from the installed codex
 
 "Set as default" in the dev build rewrote the shared `~/.codex/config.toml`, switching the installed Codex to `deepseek/deepseek-v4-flash-0731` on OpenRouter. There was no backup. It was restored from values recorded in this log, and the pre-restore file is kept as `~/.codex/config.toml.before-restore`.

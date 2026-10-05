@@ -311,6 +311,9 @@ fn decode_openrouter_models(body: &[u8]) -> Result<Vec<ModelInfo>, codex_api::Ap
             info.supports_search_tool = false;
             info.supports_experimental_context = false;
             info.use_responses_lite = false;
+            // OpenRouter drops `custom` tools, so models get the JSON function form.
+            info.apply_patch_tool_type =
+                Some(codex_protocol::openai_models::ApplyPatchToolType::Function);
             info
         })
         .collect::<Vec<_>>();
@@ -1128,6 +1131,10 @@ mod tests {
         );
         assert_eq!(model.visibility, ModelVisibility::List);
         assert!(!model.used_fallback_model_metadata);
+        assert_eq!(
+            model.apply_patch_tool_type,
+            Some(codex_protocol::openai_models::ApplyPatchToolType::Function)
+        );
     }
 
     #[test]

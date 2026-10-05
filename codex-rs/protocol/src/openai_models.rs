@@ -322,6 +322,8 @@ pub enum ConfigShellToolType {
 #[serde(rename_all = "snake_case")]
 pub enum ApplyPatchToolType {
     Freeform,
+    /// JSON function call carrying the patch as `input`, for providers without custom tools.
+    Function,
 }
 
 #[derive(

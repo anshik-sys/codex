@@ -35,3 +35,16 @@ fn create_apply_patch_freeform_tool_includes_environment_id_when_requested() {
             .contains("\"*** Environment ID: \" filename LF")
     );
 }
+
+#[test]
+fn create_apply_patch_function_tool_requires_input() {
+    let ToolSpec::Function(tool) =
+        create_apply_patch_function_tool(/*include_environment_id*/ false)
+    else {
+        panic!("expected a function tool");
+    };
+    assert_eq!(tool.name, "apply_patch");
+    let schema = serde_json::to_value(&tool.parameters).expect("schema serializes");
+    assert_eq!(schema["required"], serde_json::json!(["input"]));
+    assert_eq!(schema["properties"]["input"]["type"], "string");
+}
