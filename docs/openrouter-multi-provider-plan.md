@@ -1,6 +1,6 @@
 # OpenRouter and multi-provider selection handoff
 
-Status (2026-10-03, end of day): every step through exec model validation and TUI `/provider` is implemented, committed as `0b54bc0` on the fork. The checkout was lost and rebuilt the same day; see the PROGRESS.md entry "working tree lost to a failed nested clone, rebuilt" for what was re-verified. Open: the app-server RPC tests in Remaining steps 1–2, a live OpenRouter inference turn.
+Status (2026-10-05): implemented, tested, and pushed to the fork. This covers OpenRouter, `--provider`, exec model validation, `/provider` (continue, new chat, set default), `/model` after a switch, and per-provider model catalogs. The app-server RPC tests are in `app-server/tests/suite/v2/model_provider_list.rs`. Remaining: step 1 below (live tool-marker and stale-cache checks). See PROGRESS.md for what each piece verified and what it did not.
 
 ## Goal
 
@@ -50,7 +50,7 @@ These edits are intentionally uncommitted. `AGENTS.md` is also untracked and bel
 ## Remaining steps
 
 1. Confirm the exact OpenRouter tool-capability marker against a live catalog (current filter accepts `tools` or `tool_choice`), and test stale-cache fallback plus the missing `OPENROUTER_API_KEY` path through the app-server RPC.
-2. Add app-server RPC tests for `modelProvider/list` and provider-targeted `model/list` (feature off, unknown provider, missing key, success against a mock catalog).
+2. ~~Add app-server RPC tests for `modelProvider/list` and provider-targeted `model/list`.~~ Done 2026-10-05: `app-server/tests/suite/v2/model_provider_list.rs`.
 
 3. ~~Enforce exec model compatibility.~~ Done: `require_model_for_provider` in `exec/src/lib.rs`, covering new, resume, and fork.
 4. ~~Implement `/provider` in the TUI.~~ Done, without restarting the app-server: `thread/start` accepts `model_provider` per thread (see PROGRESS.md 2026-10-03 "/provider in the TUI"). `/model` follows the switch as of 2026-10-05; as of 2026-10-05 threads also use their own provider's catalog for model metadata and the sub-agent list.

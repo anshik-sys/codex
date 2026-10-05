@@ -2,6 +2,19 @@
 
 This file is committed so daily context follows the code across worktrees.
 
+## 2026-10-05 — app-server tests for provider rpcs
+
+`app-server/tests/suite/v2/model_provider_list.rs` covers:
+- Both RPCs rejected while `multi_provider_selection` is off.
+- `modelProvider/list`: sorted ids, OpenAI as default, and OpenRouter readiness following `OPENROUTER_API_KEY`, with the key value never in the response.
+- Targeted `model/list`: unknown provider and missing key, then a successful listing of a *non-active* provider's catalog from a mock server, requested with that provider's own key. The active provider's list stays unchanged.
+
+The success case uses a custom provider, not OpenRouter. The built-in OpenRouter entry wins over config and pins `https://openrouter.ai/api/v1`, so it cannot be pointed at a mock; its response decoding is unit-tested in `model-provider`.
+
+The user checked the remaining TUI flows by hand on 2026-10-05 and reported them working: `/provider` → Continue this conversation, `/model` after a switch, and sub-agents on OpenRouter.
+
+Gotcha: on the first run after a rebuild, the first app-server tests to start can time out in `initialize` (`deadline has elapsed`), apparently cold start of the freshly built binary. A manual `initialize` against the same binary answered immediately, and repeat runs passed 4/4 twice.
+
 ## 2026-10-05 — threads use their own provider's model catalog
 
 The sub-agent tool listed OpenAI models after `/provider`. The root cause was broader: `ThreadManagerState` passed every thread the single models manager built for the app-server's *startup* provider. A thread switched to OpenRouter therefore looked up its model in the OpenAI catalog. It got generic fallback metadata (no JSON `apply_patch`, default context window), and the spawn tool advertised OpenAI models. The earlier OpenRouter fixes only fully applied when Codex *started* on OpenRouter, e.g. `exec --provider openrouter`, which is how they were measured.
