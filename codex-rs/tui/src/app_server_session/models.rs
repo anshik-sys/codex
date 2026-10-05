@@ -25,12 +25,14 @@ impl AppServerSession {
 
     pub(crate) fn fetch_models(&self, request_id: Uuid, app_event_tx: AppEventSender) {
         let request_handle = self.request_handle();
+        // After `/provider`, list the switched provider's models, not the startup provider's.
+        let model_provider = self.model_provider_override.clone();
         tokio::spawn(async move {
             let result = request_handle
                 .request_typed::<ModelListResponse>(ClientRequest::ModelList {
                     request_id: RequestId::String(format!("model-list-{request_id}")),
                     params: ModelListParams {
-                        model_provider: None,
+                        model_provider,
                         cursor: None,
                         limit: None,
                         include_hidden: Some(true),
@@ -49,3 +51,7 @@ impl AppServerSession {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "models_tests.rs"]
+mod tests;

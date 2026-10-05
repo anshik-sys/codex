@@ -2,6 +2,14 @@
 
 This file is committed so daily context follows the code across worktrees.
 
+## 2026-10-05 — /model lists the switched provider's models
+
+After `/provider`, `/model` still listed OpenAI models. `/model` re-fetches on every open (`FetchModels` → `AppServerSession::fetch_models`), but it sent `model/list` without `modelProvider`. The app-server's active provider stays the startup one, because only new threads change provider, so the startup catalog came back. `fetch_models` now sends `model_provider_override`, which `/provider` and `--provider` set. Normal sessions send `None` as before.
+
+A test against a recording WebSocket server checks that `modelProvider` is `"openrouter"` with the override and null without it. Unverified in a real terminal.
+
+Still open: the core-side model list behind the sub-agent tool description (`turn_context.available_models`) comes from the thread manager's startup-provider models manager. Sub-agents in an OpenRouter thread can therefore be offered OpenAI model names.
+
 ## 2026-10-05 — apply_patch for openrouter models as a json function
 
 OpenRouter models had no `apply_patch` tool, though the base instructions tell them to use one. The only tool type, `ApplyPatchToolType::Freeform`, is a Responses `custom` tool with a Lark grammar. A direct test showed OpenRouter drops `custom` tools entirely: 20 input tokens, and the model asked what the tool was. Freeform was therefore not an option.
