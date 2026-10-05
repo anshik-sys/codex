@@ -21,6 +21,8 @@ Gotcha for testing: `exec` in an untrusted temporary folder is read-only, and th
 
 The dev build now runs with its own home via a `~/.zshrc` alias: `codex-dev` → `CODEX_HOME=~/.codex-dev …/codex-rs/target/debug/codex`. `~/.codex-dev` holds a copy of `config.toml` (with `multi_provider_selection = true`) and `AGENTS.md`. `auth.json` was deliberately not copied: ChatGPT refresh tokens rotate, so two copies log each other out. Use `codex-dev login` for its own sign-in. Verified: a dev run wrote its session under `~/.codex-dev/sessions` and left `~/.codex` unchanged. Everything else (history, memories, plugins, caches) starts empty in the dev home.
 
+The alias also passes `--no-daemon`. Without it, the dev build tries to install a background server into `~/.codex-dev/packages` and fails with "this CLI has no complete local package", because a cargo build is not a packaged release. Under the shared `~/.codex`, it had instead reached the installed 0.160.0 daemon, which rejects the new feature. `--no-daemon` before a subcommand works for `exec`, `resume`, and `login`; only `codex agents` rejects it, since the agents overview needs a shared server.
+
 ## 2026-10-05 — openrouter requests shed chatgpt app tools
 
 OpenRouter replies were slow. Session logs showed about 52,600 input tokens per request on OpenRouter versus 21,700 on OpenAI, with 13.1 s before the first token on `deepseek-v4-flash` against 1.6 s on `gpt-5.6-sol`. A captured request body was 227,136 characters. Tools took 182,606 of them, and seven ChatGPT app tools (`mcp__codex_apps__*`: `chatgpt_space` 62,645, `sites` 45,481, `search_service`, `pets`, `plugin_management`, `codex_document_control`, `hotline`) took about 138,000.
